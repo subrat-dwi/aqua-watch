@@ -3,47 +3,15 @@ import { StyleSheet, Text, View, ScrollView, SafeAreaView, Dimensions, ActivityI
 import MapView, { Marker } from 'react-native-maps';
 import { LineChart } from 'react-native-chart-kit';
 
-// Try multiple possible backend URLs
-const POSSIBLE_URLS = [
-  'http://10.39.164.176:5000',
-  'http://192.168.1.100:5000', // Common router IP range
-  'http://192.168.0.100:5000',  // Another common range
-  'http://localhost:5000',      // Fallback for emulator
-];
+// Change this to your backend IP
+const API_BASE_URL = 'http://10.39.164.176:5000';
 
-let API_BASE_URL = 'http://10.39.164.176:5000';
-
-// Test function to find working backend URL
-const findWorkingBackend = async () => {
-  for (const url of POSSIBLE_URLS) {
-    try {
-      console.log(`Testing URL: ${url}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      
-      const response = await fetch(`${url}/api/well-data`, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        console.log(`Found working backend at: ${url}`);
-        API_BASE_URL = url;
-        return true;
-      }
-    } catch (error) {
-      console.log(`Failed to connect to ${url}`);
-    }
-  }
-  return false;
-};
-
-export default function HomeScreen() {
+export default function IndexScreen() {
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState<{ labels: string[]; datasets: { data: number[] }[] }>({ labels: [], datasets: [{ data: [] }] });
   const [analysis, setAnalysis] = useState<{ condition: string; steps: string[] }>({ condition: '', steps: [] });
 
+  // Hard-coded location for the case study
   const sangrurLocation = {
     latitude: 30.25,
     longitude: 75.84,
@@ -54,52 +22,16 @@ export default function HomeScreen() {
   useEffect(() => {
     async function fetchData() {
       try {
-        console.log('Starting fetchData function');
-        console.log('API_BASE_URL:', API_BASE_URL);
-        
-        // Test backend connection first
-        const isConnected = await findWorkingBackend();
-        if (!isConnected) {
-          throw new Error('Cannot connect to backend server');
-        }
-        
-        // Test each endpoint individually with detailed logging
-        console.log('Fetching well-data...');
-        const wellResponse = await fetch(`${API_BASE_URL}/api/well-data`);
-        console.log('Well response status:', wellResponse.status);
-        console.log('Well response ok:', wellResponse.ok);
-        
-        if (!wellResponse.ok) {
-          throw new Error(`Well data request failed with status: ${wellResponse.status}`);
-        }
-        
-        console.log('Fetching predict...');
-        const predictResponse = await fetch(`${API_BASE_URL}/api/predict`);
-        console.log('Predict response status:', predictResponse.status);
-        
-        if (!predictResponse.ok) {
-          throw new Error(`Predict request failed with status: ${predictResponse.status}`);
-        }
-        
-        console.log('Fetching analysis...');
-        const analysisResponse = await fetch(`${API_BASE_URL}/api/analysis`);
-        console.log('Analysis response status:', analysisResponse.status);
-        
-        if (!analysisResponse.ok) {
-          throw new Error(`Analysis request failed with status: ${analysisResponse.status}`);
-        }
+        const [wellResponse, predictResponse, analysisResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/well-data`),
+          fetch(`${API_BASE_URL}/api/predict`),
+          fetch(`${API_BASE_URL}/api/analysis`),
+        ]);
 
-        console.log('Parsing JSON responses...');
         const wellData = await wellResponse.json();
-        console.log('Well data received:', Object.keys(wellData));
-        
         const predictData = await predictResponse.json();
-        console.log('Predict data received:', Object.keys(predictData));
-        
         const analysisData = await analysisResponse.json();
-        console.log('Analysis data received:', analysisData);
 
-        console.log('Processing chart data...');
         const combinedLabels = [...wellData.dates];
         const historicalDataset = wellData.levels;
         const forecastDataset = Array(wellData.levels.length).fill(null).concat(predictData.predicted_levels);
@@ -113,30 +45,13 @@ export default function HomeScreen() {
         });
 
         setAnalysis(analysisData);
-        console.log('Data processing completed successfully');
       } catch (error) {
-        console.error("Detailed error in fetchData:", error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        console.error("Error message:", errorMessage);
-        if (error instanceof Error) {
-          console.error("Error stack:", error.stack);
-        }
-        setAnalysis({ 
-          condition: "Connection Error", 
-          steps: [
-            `Error: ${errorMessage}`,
-            "Check if the Flask backend is running on port 5000",
-            "Verify your device is connected to the same WiFi network",
-            `Backend URL: ${API_BASE_URL}`
-          ] 
-        });
+        console.error("Failed to fetch data:", error);
+        setAnalysis({ condition: "Error", steps: ["Could not connect to the server. Make sure the backend is running and the IP address is correct."] });
       } finally {
-        console.log('fetchData completed, setting loading to false');
         setLoading(false);
       }
     }
-    
-    console.log('useEffect called, starting fetchData');
     fetchData();
   }, []);
 
