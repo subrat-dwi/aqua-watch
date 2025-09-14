@@ -46,15 +46,26 @@ def get_prediction():
     df = pd.read_csv(os.path.join(DATA_DIR, source))
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values(by='Date')
-    df['day_of_year'] = df['Date'].dt.dayofyear
-    X = df[['day_of_year']]
-    y = df['Water_Level_m']
+    
+    # Use the same data processing as well-data endpoint for consistency
+    N = 90
+    df_recent = df.tail(N).copy()
+    window = 5
+    df_recent['Smoothed_Level'] = df_recent['Water_Level_m'].rolling(window=window, min_periods=1).mean()
+    
+    # Use smoothed data for prediction to ensure continuity
+    df_recent['day_of_year'] = df_recent['Date'].dt.dayofyear
+    X = df_recent[['day_of_year']]
+    y = df_recent['Smoothed_Level']  # Use smoothed data instead of raw data
+    
     model = LinearRegression()
     model.fit(X, y)
-    last_date = df['Date'].iloc[-1]
+    
+    last_date = df_recent['Date'].iloc[-1]
     future_dates = [last_date + timedelta(days=i) for i in range(1, 31)]
     future_days_of_year = np.array([date.dayofyear for date in future_dates]).reshape(-1, 1)
     predicted_levels = model.predict(future_days_of_year)
+    
     prediction_data = {
         'future_dates': [date.strftime('%Y-%m-%d') for date in future_dates],
         'predicted_levels': predicted_levels.tolist()
@@ -68,7 +79,17 @@ def get_analysis():
         return jsonify({'error': 'Invalid source'}), 400
     df = pd.read_csv(os.path.join(DATA_DIR, source))
     df['Date'] = pd.to_datetime(df['Date'])
-    last_level = df.sort_values(by='Date', ascending=False)['Water_Level_m'].iloc[0]
+    df = df.sort_values(by='Date')
+    
+    # Use same smoothed data processing for consistency
+    N = 90
+    df_recent = df.tail(N).copy()
+    window = 5
+    df_recent['Smoothed_Level'] = df_recent['Water_Level_m'].rolling(window=window, min_periods=1).mean()
+    
+    # Use the most recent smoothed level for analysis
+    last_level = df_recent['Smoothed_Level'].iloc[-1]
+    
     critical_threshold = 2.15
     semi_critical_threshold = 2.25
     if last_level < critical_threshold:
