@@ -53,18 +53,27 @@ def get_prediction():
     window = 5
     df_recent['Smoothed_Level'] = df_recent['Water_Level_m'].rolling(window=window, min_periods=1).mean()
     
-    # Use smoothed data for prediction to ensure continuity
-    df_recent['day_of_year'] = df_recent['Date'].dt.dayofyear
-    X = df_recent[['day_of_year']]
-    y = df_recent['Smoothed_Level']  # Use smoothed data instead of raw data
+    # Use sequential index instead of day_of_year for better trend continuation
+    df_recent = df_recent.reset_index(drop=True)
+    X = df_recent.index.values.reshape(-1, 1)  # Sequential days: 0, 1, 2, 3...
+    y = df_recent['Smoothed_Level']
     
     model = LinearRegression()
     model.fit(X, y)
     
+    # Get last values for continuity check
     last_date = df_recent['Date'].iloc[-1]
+    last_smoothed_value = df_recent['Smoothed_Level'].iloc[-1]
+    
+    # Predict future values continuing the sequence
     future_dates = [last_date + timedelta(days=i) for i in range(1, 31)]
-    future_days_of_year = np.array([date.dayofyear for date in future_dates]).reshape(-1, 1)
-    predicted_levels = model.predict(future_days_of_year)
+    future_X = np.array([len(df_recent) + i for i in range(30)]).reshape(-1, 1)
+    predicted_levels = model.predict(future_X)
+    
+    # Ensure continuity by adjusting first prediction to match last historical value
+    if len(predicted_levels) > 0:
+        adjustment = last_smoothed_value - predicted_levels[0]
+        predicted_levels = predicted_levels + adjustment
     
     prediction_data = {
         'future_dates': [date.strftime('%Y-%m-%d') for date in future_dates],
