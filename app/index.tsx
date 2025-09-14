@@ -4,7 +4,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { LineChart } from 'react-native-chart-kit';
 
 // Change this to your backend IP
-const API_BASE_URL = 'http://10.39.164.176:5000';
+const API_BASE_URL = 'https://aqua-watch.onrender.com';
 
 export default function IndexScreen() {
   const [loading, setLoading] = useState(true);
